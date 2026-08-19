@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tife Hair Essentials</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="bg-light">
+
+<div id="wrapper">
+    
+    <!-- 💻 Desktop Sidebar (Hidden on Mobile) -->
+    <div class="bg-dark text-white border-end d-none d-md-block" id="sidebar-wrapper">
+        <div class="sidebar-heading px-3 py-3 fw-bold fs-5 text-warning border-bottom border-secondary">
+            <i class="bi bi-gem me-2"></i>Tife Hair
+        </div>
+        <div class="nav nav-pills flex-column px-2 py-3">
+            <button class="nav-link text-white active text-start mb-2" id="pill-dashboard-dt" data-bs-toggle="pill" data-bs-target="#tab-dashboard">
+                <i class="bi bi-speedometer2 me-2"></i> Dashboard
+            </button>
+            <button class="nav-link text-white text-start mb-2" id="pill-products-dt" data-bs-toggle="pill" data-bs-target="#tab-products">
+                <i class="bi bi-box-seam me-2"></i> Products & Stock
+            </button>
+            <button class="nav-link text-white text-start mb-2" id="pill-checklist-dt" data-bs-toggle="pill" data-bs-target="#tab-checklist">
+                <i class="bi bi-check2-square me-2"></i> Daily Sales
+            </button>
+            <button class="nav-link text-white text-start mb-2" id="pill-history-dt" data-bs-toggle="pill" data-bs-target="#tab-history">
+                <i class="bi bi-clock-history me-2"></i> Sales History
+            </button>
+            <button class="nav-link text-white text-start mb-2" id="pill-expenses-dt" data-bs-toggle="pill" data-bs-target="#tab-expenses">
+                <i class="bi bi-cash-coin me-2"></i> Expenses
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="main-content-area">
+        
+        <!-- Clean Top Header -->
+        <nav class="navbar bg-white border-bottom px-3 py-2 sticky-top shadow-sm">
+            <div class="container-fluid px-0 d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center">
+                    <span class="badge bg-warning text-dark me-2 fs-6"><i class="bi bi-gem"></i></span>
+                    <span class="fw-bold text-dark fs-6">Tife Hair Essentials</span>
+                </div>
+                
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-secondary py-1 px-2" id="refreshBtn">
+                        <i class="bi bi-arrow-clockwise"></i> Sync
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger py-1 px-2" data-bs-toggle="modal" data-bs-target="#resetDataModal">
+                        <i class="bi bi-trash"></i> Reset
+                    </button>
+                </div>
+            </div>
+        </nav>
+
+        <div class="container-fluid px-3 py-3 tab-content" id="v-pills-tabContent">
+            
+            <!-- 📊 TAB 1: DASHBOARD -->
+            <div class="tab-pane fade show active" id="tab-dashboard">
+                <div class="welcome-header mb-3">
+                    <h6 class="text-muted mb-0 small">Good Morning,</h6>
+                    <h4 class="fw-bold text-dark">Tife 👋</h4>
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-12">
+                        <div class="card border-0 shadow-sm p-3 bg-dark text-white rounded-4">
+                            <small class="text-warning fw-semibold text-uppercase">Expected Account Balance</small>
+                            <h2 class="fw-bold mb-0 text-white" id="cardAccountBalance">₦0</h2>
+                            <small class="text-white-50">Total Sales - Expenses</small>
+                        </div>
+                    </div>
+                    
+                    <div class="col-6">
+                        <div class="card border-0 shadow-sm p-3 rounded-3 border-start border-4 border-success">
+                            <small class="text-muted fw-semibold">Today's Sales</small>
+                            <h4 class="fw-bold text-success mb-0" id="cardTodaySales">₦0</h4>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="card border-0 shadow-sm p-3 rounded-3 border-start border-4 border-primary">
+                            <small class="text-muted fw-semibold">Today's Profit</small>
+                            <h4 class="fw-bold text-primary mb-0" id="cardTodayProfit">₦0</h4>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="card border-0 shadow-sm p-3 rounded-3 border-start border-4 border-secondary">
+                            <small class="text-muted fw-semibold">Total Sales</small>
+                            <h5 class="fw-bold mb-0" id="cardTotalSales">₦0</h5>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="card border-0 shadow-sm p-3 rounded-3 border-start border-4 border-danger">
+                            <small class="text-muted fw-semibold">Total Expenses</small>
+                            <h5 class="fw-bold text-danger mb-0" id="cardExpenses">₦0</h5>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Daily Breakdown -->
+                <div class="card border-0 shadow-sm p-3 rounded-3">
+                    <h6 class="fw-bold mb-3"><i class="bi bi-calendar-check text-primary me-2"></i>Daily Profit & Expense Summary</h6>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light small">
+                                <tr>
+                                    <th>DATE</th>
+                                    <th>SALES</th>
+                                    <th>GROSS PROFIT</th>
+                                    <th>EXPENSES</th>
+                                    <th>NET BALANCE</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dailySummaryTableBody" class="small"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <!-- 📦 TAB 2: PRODUCTS & STOCK MANAGEMENT -->
+            <div class="tab-pane fade" id="tab-products">
+                <div class="card border-0 shadow-sm p-3 rounded-3">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="fw-bold mb-0">Inventory & Restocking</h6>
+                        <button class="btn btn-success btn-sm rounded-pill" data-bs-toggle="modal" data-bs-target="#addProductModal">+ Add Product</button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light small">
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Cost</th>
+                                    <th>Price</th>
+                                    <th>Sold</th>
+                                    <th>Left</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="inventoryTableBody" class="small"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 🛒 TAB 3: DAILY SALES CHECKLIST -->
+            <div class="tab-pane fade" id="tab-checklist">
+                <div class="card border-0 shadow-sm p-3 rounded-3">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="fw-bold mb-0"><i class="bi bi-check2-square text-success me-1"></i>Today's Sales</h6>
+                        <button class="btn btn-primary btn-sm rounded-pill px-3" id="submitChecklistBtn">Record Sales</button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light small">
+                                <tr>
+                                    <th style="width: 40px;">Sold</th>
+                                    <th>Product</th>
+                                    <th>Price</th>
+                                    <th>Stock</th>
+                                    <th style="width: 80px;">Qty</th>
+                                </tr>
+                            </thead>
+                            <tbody id="checklistTableBody" class="small"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 📅 TAB 4: SALES HISTORY -->
+            <div class="tab-pane fade" id="tab-history">
+                <div class="card border-0 shadow-sm p-3 rounded-3">
+                    <h6 class="fw-bold mb-3">Sales History Log</h6>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light small">
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Product</th>
+                                    <th>Qty</th>
+                                    <th>Amount</th>
+                                    <th>Profit</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTableBody" class="small"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 💰 TAB 5: EXPENSES -->
+            <div class="tab-pane fade" id="tab-expenses">
+                <div class="card border-0 shadow-sm p-3 rounded-3">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="fw-bold mb-0">Expenses / Payouts</h6>
+                        <button class="btn btn-danger btn-sm rounded-pill" data-bs-toggle="modal" data-bs-target="#addExpenseModal">+ Log Expense</button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light small">
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Description</th>
+                                    <th>Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody id="expenseTableBody" class="small"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- 📱 Mobile Native Bottom Navigation Bar (Hidden on Desktop) -->
+<nav class="navbar navbar-dark bg-dark fixed-bottom d-md-none border-top border-secondary py-1">
+    <div class="container-fluid d-flex justify-content-around text-center px-0">
+        <button class="btn btn-link text-white text-decoration-none py-1 px-2 nav-btn active" id="mobile-tab-dashboard" onclick="switchMobileTab('tab-dashboard', this)">
+            <i class="bi bi-speedometer2 d-block fs-5"></i>
+            <span style="font-size: 10px;">Home</span>
+        </button>
+        <button class="btn btn-link text-white-50 text-decoration-none py-1 px-2 nav-btn" id="mobile-tab-products" onclick="switchMobileTab('tab-products', this)">
+            <i class="bi bi-box-seam d-block fs-5"></i>
+            <span style="font-size: 10px;">Stock</span>
+        </button>
+        <button class="btn btn-link text-white-50 text-decoration-none py-1 px-2 nav-btn" id="mobile-tab-checklist" onclick="switchMobileTab('tab-checklist', this)">
+            <i class="bi bi-check2-square d-block fs-5 text-warning"></i>
+            <span style="font-size: 10px;" class="text-warning fw-bold">Sell</span>
+        </button>
+        <button class="btn btn-link text-white-50 text-decoration-none py-1 px-2 nav-btn" id="mobile-tab-history" onclick="switchMobileTab('tab-history', this)">
+            <i class="bi bi-clock-history d-block fs-5"></i>
+            <span style="font-size: 10px;">History</span>
+        </button>
+        <button class="btn btn-link text-white-50 text-decoration-none py-1 px-2 nav-btn" id="mobile-tab-expenses" onclick="switchMobileTab('tab-expenses', this)">
+            <i class="bi bi-cash-coin d-block fs-5"></i>
+            <span style="font-size: 10px;">Expenses</span>
+        </button>
+    </div>
+</nav>
+
+<!-- Modals -->
+<div class="modal fade" id="restockModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow rounded-4">
+            <div class="modal-header bg-primary text-white">
+                <h6 class="modal-title fw-bold">Restock Product</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="restockForm">
+                <div class="modal-body">
+                    <input type="hidden" id="restockProductId">
+                    <p class="fw-semibold mb-2" id="restockProductName"></p>
+                    <div class="mb-3">
+                        <label class="form-label small">Additional Quantity Added *</label>
+                        <input type="number" class="form-control form-control-lg" id="restockQty" min="1" value="1" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary w-100">Update Stock</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="addProductModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow rounded-4">
+            <div class="modal-header bg-success text-white">
+                <h6 class="modal-title fw-bold">Add New Product</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="addProductForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Product Name *</label>
+                        <input type="text" class="form-control form-control-lg" id="prodName" placeholder="e.g. Xpression Attachment" required>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Cost Price (₦) *</label>
+                            <input type="number" class="form-control form-control-lg" id="prodCost" placeholder="3500" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Selling Price (₦) *</label>
+                            <input type="number" class="form-control form-control-lg" id="prodPrice" placeholder="5000" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Initial Stock Qty *</label>
+                        <input type="number" class="form-control form-control-lg" id="prodStock" value="1" min="1" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-success w-100">Save Product</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="addExpenseModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow rounded-4">
+            <div class="modal-header bg-danger text-white">
+                <h6 class="modal-title fw-bold">Log Expense / Withdrawal</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="expenseForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Description *</label>
+                        <input type="text" class="form-control form-control-lg" id="expTitle" placeholder="Personal withdrawal or Transport" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Amount (₦) *</label>
+                        <input type="number" class="form-control form-control-lg" id="expAmount" placeholder="2000" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-danger w-100">Save Expense</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editProductModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow rounded-4">
+            <div class="modal-header bg-warning text-dark">
+                <h6 class="modal-title fw-bold">Edit Product Prices</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="editProductForm">
+                <div class="modal-body">
+                    <input type="hidden" id="editProductId">
+                    <p class="fw-semibold mb-2" id="editProductName"></p>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Cost Price (₦) *</label>
+                            <input type="number" class="form-control form-control-lg" id="editCostPrice" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Selling Price (₦) *</label>
+                            <input type="number" class="form-control form-control-lg" id="editSellingPrice" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-warning w-100 fw-bold">Update Prices</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Reset Data Modal -->
+<div class="modal fade" id="resetDataModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow rounded-4">
+            <div class="modal-header bg-danger text-white">
+                <h6 class="modal-title fw-bold"><i class="bi bi-exclamation-triangle-fill me-2"></i>Reset Business Data</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center p-4">
+                <p class="text-muted small mb-3">Select what you would like to clear. This action cannot be undone!</p>
+                
+                <div class="d-grid gap-2">
+                    <button type="button" class="btn btn-outline-danger py-2" onclick="executeReset('transactions')">
+                        <i class="bi bi-receipt me-1"></i> Clear Sales & Expenses Only
+                        <div class="small opacity-75" style="font-size: 11px;">(Keeps your products and stock numbers)</div>
+                    </button>
+
+                    <button type="button" class="btn btn-danger py-2" onclick="executeReset('full')">
+                        <i class="bi bi-trash3-fill me-1"></i> Full Factory Reset
+                        <div class="small opacity-75" style="font-size: 11px;">(Deletes ALL products, sales, and expenses)</div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="resetDataModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow rounded-4">
+            <div class="modal-header bg-danger text-white">
+                <h6 class="modal-title fw-bold"><i class="bi bi-exclamation-triangle-fill me-2"></i>Reset Business Data</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center p-4">
+                <p class="text-muted small mb-3">Select what you would like to clear. This action cannot be undone!</p>
+                
+                <div class="d-grid gap-2">
+                    <button type="button" class="btn btn-outline-danger py-2" onclick="executeReset('transactions')">
+                        <i class="bi bi-receipt me-1"></i> Clear Sales & Expenses Only
+                        <div class="small opacity-75" style="font-size: 11px;">(Keeps your products and stock numbers)</div>
+                    </button>
+
+                    <button type="button" class="btn btn-danger py-2" onclick="executeReset('full')">
+                        <i class="bi bi-trash3-fill me-1"></i> Full Factory Reset
+                        <div class="small opacity-75" style="font-size: 11px;">(Deletes ALL products, sales, and expenses)</div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script>
+    function switchMobileTab(targetTabId, btn) {
+        // 1. Hide all tab panes
+        document.querySelectorAll('.tab-pane').forEach(pane => {
+            pane.classList.remove('show', 'active');
+        });
+
+        // 2. Show the selected tab pane
+        const targetPane = document.getElementById(targetTabId);
+        if (targetPane) {
+            targetPane.classList.add('show', 'active');
+        }
+
+        // 3. Update active button highlights in bottom nav
+        document.querySelectorAll('.nav-btn').forEach(b => {
+            b.classList.remove('text-white', 'fw-bold');
+            b.classList.add('text-white-50');
+        });
+        
+        btn.classList.remove('text-white-50');
+        btn.classList.add('text-white', 'fw-bold');
+
+        // 4. Keep desktop sidebar buttons in sync
+        document.querySelectorAll('#sidebar-wrapper .nav-link').forEach(link => {
+            link.classList.remove('active');
+        });
+        const desktopBtn = document.querySelector(`[data-bs-target="#${targetTabId}"]`);
+        if (desktopBtn) {
+            desktopBtn.classList.add('active');
+        }
+
+        // Scroll back to top when switching views on mobile
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+</script>
+</body>
+</html>
