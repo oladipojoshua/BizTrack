@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tife Hair Essentials</title>
+    <link rel="icon" type="image/png"
+    href="{{ url_for('static', filename='img/favicon.png') }}">
+    <title>{{ current_user.business_name if current_user.business_name else 'BizTrack' }} - Business Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
@@ -14,8 +16,15 @@
     
     <!-- 💻 Desktop Sidebar (Hidden on Mobile) -->
     <div class="bg-dark text-white border-end d-none d-md-block" id="sidebar-wrapper">
-        <div class="sidebar-heading px-3 py-3 fw-bold fs-5 text-warning border-bottom border-secondary">
-            <i class="bi bi-gem me-2"></i>Tife Hair
+        <div class="sidebar-heading px-3 py-3 border-bottom border-secondary">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-graph-up-arrow fs-4 text-warning me-2"></i>
+                <span class="fw-bold fs-5 text-white">BizTrack</span>
+            </div>
+            <div class="mt-2 text-muted small lh-sm">
+                <div class="fw-semibold text-truncate text-white-50">{{ current_user.business_name }}</div>
+                <div class="text-truncate style-subtext" style="font-size: 11px;">@{{ current_user.username }}</div>
+            </div>
         </div>
         <div class="nav nav-pills flex-column px-2 py-3">
             <button class="nav-link text-white active text-start mb-2" id="pill-dashboard-dt" data-bs-toggle="pill" data-bs-target="#tab-dashboard">
@@ -34,37 +43,58 @@
                 <i class="bi bi-cash-coin me-2"></i> Expenses
             </button>
         </div>
+        <div class="px-3 mt-auto pt-3 border-top border-secondary">
+            <div class="text-white-50 small text-truncate mb-2" title="{{ current_user.email }}">
+                <i class="bi bi-envelope me-1"></i> {{ current_user.email }}
+            </div>
+            <a href="{{ url_for('logout') }}" class="btn btn-sm btn-outline-light w-100 mb-3">
+                <i class="bi bi-box-arrow-right me-1"></i> Log Out
+            </a>
+        </div>
     </div>
 
     <!-- Main Content Area -->
     <div class="main-content-area">
         
-        <!-- Clean Top Header -->
-        <nav class="navbar bg-white border-bottom px-3 py-2 sticky-top shadow-sm">
+        <!-- 📱 Responsive Restructured Top Header -->
+        <nav class="navbar bg-dark text-white border-bottom border-secondary px-3 py-2 sticky-top shadow-sm">
             <div class="container-fluid px-0 d-flex justify-content-between align-items-center">
-                <div class="d-flex align-items-center">
-                    <span class="badge bg-warning text-dark me-2 fs-6"><i class="bi bi-gem"></i></span>
-                    <span class="fw-bold text-dark fs-6">Tife Hair Essentials</span>
+                <!-- Brand / Business Identity -->
+                <div class="d-flex align-items-center me-2">
+                    <span class="badge bg-warning text-dark p-2 me-2 rounded-3 fs-6 d-flex align-items-center justify-content-center">
+                        <i class="bi bi-graph-up-arrow"></i>
+                    </span>
+                    <div class="d-flex flex-column justify-content-center">
+                        <span class="fw-bold text-white fs-6 lh-1 mb-1 text-truncate" style="max-width: 150px;">
+                            {{ current_user.business_name if current_user.business_name else 'BizTrack' }}
+                        </span>
+                        <small class="text-white-50 lh-1" style="font-size: 11px;">@{{ current_user.username }}</small>
+                    </div>
                 </div>
                 
-                <div class="d-flex gap-2">
-                    <button class="btn btn-sm btn-outline-secondary py-1 px-2" id="refreshBtn">
-                        <i class="bi bi-arrow-clockwise"></i> Sync
+                <!-- Action Tools & Mobile Logout Button -->
+                <div class="d-flex gap-1 align-items-center">
+                    <button class="btn btn-sm btn-outline-light py-1 px-2" id="refreshBtn" title="Sync Data">
+                        <i class="bi bi-arrow-clockwise me-1"></i><span class="d-none d-sm-inline">Sync</span>
                     </button>
-                    <button class="btn btn-sm btn-outline-danger py-1 px-2" data-bs-toggle="modal" data-bs-target="#resetDataModal">
-                        <i class="bi bi-trash"></i> Reset
+                    <button class="btn btn-sm btn-outline-danger py-1 px-2" data-bs-toggle="modal" data-bs-target="#resetDataModal" title="Reset Data">
+                        <i class="bi bi-trash me-1"></i><span class="d-none d-sm-inline">Reset</span>
                     </button>
+                    <!-- Mobile Logout Button -->
+                    <a href="{{ url_for('logout') }}" class="btn btn-sm btn-outline-danger py-1 px-2 d-md-none" title="Log Out" onclick="return confirm('Are you sure you want to log out?');">
+                        <i class="bi bi-box-arrow-right"></i>
+                    </a>
                 </div>
             </div>
         </nav>
 
-        <div class="container-fluid px-3 py-3 tab-content" id="v-pills-tabContent">
+        <div class="container-fluid px-3 py-3 tab-content pb-5 mb-4" id="v-pills-tabContent">
             
             <!-- 📊 TAB 1: DASHBOARD -->
             <div class="tab-pane fade show active" id="tab-dashboard">
                 <div class="welcome-header mb-3">
-                    <h6 class="text-muted mb-0 small">Good Morning,</h6>
-                    <h4 class="fw-bold text-dark">Tife 👋</h4>
+                    <h6 class="text-muted mb-0 small">Welcome back,</h6>
+                    <h4 class="fw-bold text-dark">{{ current_user.username if current_user else session.get('username', 'User') }} 👋</h4>
                 </div>
 
                 <div class="row g-2 mb-3">
@@ -121,6 +151,7 @@
                     </div>
                 </div>
             </div>
+
             <!-- 📦 TAB 2: PRODUCTS & STOCK MANAGEMENT -->
             <div class="tab-pane fade" id="tab-products">
                 <div class="card border-0 shadow-sm p-3 rounded-3">
@@ -217,7 +248,7 @@
     </div>
 </div>
 
-<!-- 📱 Mobile Native Bottom Navigation Bar (Hidden on Desktop) -->
+<!-- 📱 Mobile Bottom Navigation Bar -->
 <nav class="navbar navbar-dark bg-dark fixed-bottom d-md-none border-top border-secondary py-1">
     <div class="container-fluid d-flex justify-content-around text-center px-0">
         <button class="btn btn-link text-white text-decoration-none py-1 px-2 nav-btn active" id="mobile-tab-dashboard" onclick="switchMobileTab('tab-dashboard', this)">
@@ -279,7 +310,7 @@
                 <div class="modal-body">
                     <div class="mb-3">
                         <label class="form-label small fw-bold">Product Name *</label>
-                        <input type="text" class="form-control form-control-lg" id="prodName" placeholder="e.g. Xpression Attachment" required>
+                        <input type="text" class="form-control form-control-lg" id="prodName" placeholder="e.g. Standard Item" required>
                     </div>
                     <div class="row g-2 mb-3">
                         <div class="col-6">
@@ -360,33 +391,6 @@
     </div>
 </div>
 
-<!-- Reset Data Modal -->
-<div class="modal fade" id="resetDataModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow rounded-4">
-            <div class="modal-header bg-danger text-white">
-                <h6 class="modal-title fw-bold"><i class="bi bi-exclamation-triangle-fill me-2"></i>Reset Business Data</h6>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body text-center p-4">
-                <p class="text-muted small mb-3">Select what you would like to clear. This action cannot be undone!</p>
-                
-                <div class="d-grid gap-2">
-                    <button type="button" class="btn btn-outline-danger py-2" onclick="executeReset('transactions')">
-                        <i class="bi bi-receipt me-1"></i> Clear Sales & Expenses Only
-                        <div class="small opacity-75" style="font-size: 11px;">(Keeps your products and stock numbers)</div>
-                    </button>
-
-                    <button type="button" class="btn btn-danger py-2" onclick="executeReset('full')">
-                        <i class="bi bi-trash3-fill me-1"></i> Full Factory Reset
-                        <div class="small opacity-75" style="font-size: 11px;">(Deletes ALL products, sales, and expenses)</div>
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
 <div class="modal fade" id="resetDataModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow rounded-4">
@@ -417,18 +421,15 @@
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 <script>
     function switchMobileTab(targetTabId, btn) {
-        // 1. Hide all tab panes
         document.querySelectorAll('.tab-pane').forEach(pane => {
             pane.classList.remove('show', 'active');
         });
 
-        // 2. Show the selected tab pane
         const targetPane = document.getElementById(targetTabId);
         if (targetPane) {
             targetPane.classList.add('show', 'active');
         }
 
-        // 3. Update active button highlights in bottom nav
         document.querySelectorAll('.nav-btn').forEach(b => {
             b.classList.remove('text-white', 'fw-bold');
             b.classList.add('text-white-50');
@@ -437,7 +438,6 @@
         btn.classList.remove('text-white-50');
         btn.classList.add('text-white', 'fw-bold');
 
-        // 4. Keep desktop sidebar buttons in sync
         document.querySelectorAll('#sidebar-wrapper .nav-link').forEach(link => {
             link.classList.remove('active');
         });
@@ -446,7 +446,6 @@
             desktopBtn.classList.add('active');
         }
 
-        // Scroll back to top when switching views on mobile
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 </script>

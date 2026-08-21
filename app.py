@@ -1,32 +1,56 @@
 import os
-
-from flask import Flask, render_template, request, jsonify
+import random
+from datetime import datetime, date
+from functools import wraps
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
-from collections import defaultdict
+from flask_mail import Mail, Message
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
-
-# Configure SQLite Database
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///tife_hair.db'
+app.config['SECRET_KEY'] = 'super-secret-key-change-this-in-production'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///biztrack.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Create an absolute path to the database in the app folder
-basedir = os.path.abspath(os.path.dirname(__file__))
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'tife_hair.db')
-db = SQLAlchemy(app)
+# ==========================================
+# EMAIL SMTP CONFIGURATION
+# ==========================================
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 465
+app.config['MAIL_USE_TLS'] = False
+app.config['MAIL_USE_SSL'] = True
+app.config['MAIL_USERNAME'] = 'joshola7073@gmail.com'
+app.config['MAIL_PASSWORD'] = 'vqrv uouf ecny oiui'
+app.config['MAIL_DEFAULT_SENDER'] = ('BizTrack', 'joshola7073@gmail.com')
 
-# -------------------------------------------------------------------
+db = SQLAlchemy(app)
+mail = Mail(app)
+
+# ==========================================
 # DATABASE MODELS
-# -------------------------------------------------------------------
+# ==========================================
+
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    business_name = db.Column(db.String(100), nullable=False)
+    username = db.Column(db.String(80), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    is_admin = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    products = db.relationship('Product', backref='owner', lazy=True, cascade="all, delete-orphan")
+    sales = db.relationship('Sale', backref='owner', lazy=True, cascade="all, delete-orphan")
+    expenses = db.relationship('Expense', backref='owner', lazy=True, cascade="all, delete-orphan")
 
 class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
     cost_price = db.Column(db.Float, nullable=False)
     selling_price = db.Column(db.Float, nullable=False)
-    stock_qty = db.Column(db.Integer, nullable=False, default=0)
-    sales_count = db.Column(db.Integer, nullable=False, default=0)
+    stock_qty = db.Column(db.Integer, default=0)
+    sales_count = db.Column(db.Integer, default=0)
 
     def to_dict(self):
         return {
@@ -40,10 +64,11 @@ class Product(db.Model):
 
 class Sale(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
     product_name = db.Column(db.String(100), nullable=False)
     quantity = db.Column(db.Integer, nullable=False)
-    selling_price = db.Column(db.Float, nullable=False)
+    unit_price = db.Column(db.Float, nullable=False)
     cost_price = db.Column(db.Float, nullable=False)
     total_amount = db.Column(db.Float, nullable=False)
     profit = db.Column(db.Float, nullable=False)
@@ -54,7 +79,6 @@ class Sale(db.Model):
             'id': self.id,
             'product_name': self.product_name,
             'quantity': self.quantity,
-            'selling_price': self.selling_price,
             'total_amount': self.total_amount,
             'profit': self.profit,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M')
@@ -62,6 +86,7 @@ class Sale(db.Model):
 
 class Expense(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     title = db.Column(db.String(150), nullable=False)
     amount = db.Column(db.Float, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -74,177 +99,381 @@ class Expense(db.Model):
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M')
         }
 
-# Initialize Database Tables
-with app.app_context():
-    db.create_all()
+# ==========================================
+# CONTEXT PROCESSOR (INJECTS current_user GLOBALLY)
+# ==========================================
 
-# -------------------------------------------------------------------
-# ROUTES & API ENDPOINTS
-# -------------------------------------------------------------------
+@app.context_processor
+def inject_user():
+    if 'user_id' in session:
+        return {'current_user': User.query.get(session['user_id'])}
+    return {'current_user': None}
+
+# ==========================================
+# AUTHENTICATION DECORATORS
+# ==========================================
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session or not session.get('is_admin'):
+            return redirect(url_for('dashboard'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# ==========================================
+# ROUTES & AUTHENTICATION
+# ==========================================
 
 @app.route('/')
+@login_required
 def dashboard():
     return render_template('dashboard.html')
 
-@app.route('/api/daily-summary', methods=['GET'])
-def get_daily_summary():
-    daily_data = defaultdict(lambda: {'sales': 0.0, 'profit': 0.0, 'expenses': 0.0})
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        password = request.form.get('password', '').strip()
 
-    # Aggregate Sales by Date
-    for sale in Sale.query.all():
-        date_str = sale.created_at.strftime('%Y-%m-%d')
-        daily_data[date_str]['sales'] += sale.total_amount
-        daily_data[date_str]['profit'] += sale.profit
+        user = User.query.filter_by(email=email).first()
+        if user and check_password_hash(user.password_hash, password):
+            session['user_id'] = user.id
+            session['email'] = user.email
+            session['business_name'] = user.business_name
+            session['username'] = user.username  # <-- Store in session
+            session['is_admin'] = user.is_admin
+            
+            if user.is_admin:
+                return redirect(url_for('admin_panel'))
+            return redirect(url_for('dashboard'))
 
-    # Aggregate Expenses by Date
-    for exp in Expense.query.all():
-        date_str = exp.created_at.strftime('%Y-%m-%d')
-        daily_data[date_str]['expenses'] += exp.amount
+        return render_template('login.html', error="Invalid email or password.")
+    return render_template('login.html')
 
-    # Convert to sorted list (latest date first)
-    summary_list = []
-    for date_str in sorted(daily_data.keys(), reverse=True):
-        data = daily_data[date_str]
-        summary_list.append({
-            'date': date_str,
-            'sales': data['sales'],
-            'profit': data['profit'],
-            'expenses': data['expenses'],
-            'net_cash': data['sales'] - data['expenses']
-        })
+@app.route('/signup', methods=['GET', 'POST'])
+def signup():
+    if request.method == 'POST':
+        business_name = request.form.get('business_name', '').strip()
+        username = request.form.get('username', '').strip()  # <-- Collect username
+        email = request.form.get('email', '').strip().lower()
+        password = request.form.get('password', '').strip()
 
-    return jsonify(summary_list)
+        if User.query.filter_by(email=email).first():
+            return render_template('signup.html', error="An account with this email already exists.")
 
-# --- Products API ---
+        hashed_pw = generate_password_hash(password)
+        is_first_user = User.query.count() == 0
+        is_admin = is_first_user or (email == 'joshua@biztrack.com' or username.lower() == 'joshua')
 
-@app.route('/api/products', methods=['GET'])
-def get_products():
-    products = Product.query.all()
-    return jsonify([p.to_dict() for p in products])
+        new_user = User(
+            business_name=business_name,
+            username=username,  # <-- Save to DB
+            email=email,
+            password_hash=hashed_pw,
+            is_admin=is_admin
+        )
+        db.session.add(new_user)
+        db.session.commit()
 
-@app.route('/api/products', methods=['POST'])
-def add_product():
-    data = request.get_json()
-    new_prod = Product(
-        name=data['name'],
-        cost_price=float(data['cost_price']),
-        selling_price=float(data['selling_price']),
-        stock_qty=int(data['stock_qty'])
-    )
-    db.session.add(new_prod)
-    db.session.commit()
-    return jsonify({'message': 'Product added successfully', 'product': new_prod.to_dict()})
+        session['user_id'] = new_user.id
+        session['email'] = new_user.email
+        session['business_name'] = new_user.business_name
+        session['username'] = new_user.username  # <-- Store in session
+        session['is_admin'] = new_user.is_admin
 
-@app.route('/api/products/<int:prod_id>/restock', methods=['POST'])
-def restock_product(prod_id):
-    data = request.get_json()
-    product = Product.query.get_or_404(prod_id)
-    product.stock_qty += int(data['added_qty'])
-    db.session.commit()
-    return jsonify({'message': 'Stock updated', 'product': product.to_dict()})
+        return redirect(url_for('admin_panel' if is_admin else 'dashboard'))
 
-@app.route('/api/products/<int:prod_id>', methods=['DELETE'])
-def delete_product(prod_id):
-    product = Product.query.get_or_404(prod_id) # cite: 1.1.2
-    db.session.delete(product) # cite: 1.1.2
-    db.session.commit() # cite: 1.1.2
-    return jsonify({'message': 'Product deleted successfully'})
+    return render_template('signup.html')
 
-@app.route('/api/products/<int:prod_id>/edit', methods=['PUT'])
-def edit_product(prod_id):
-    product = Product.query.get_or_404(prod_id)
-    data = request.get_json()
+# STEP 1: Request OTP Code
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        user = User.query.filter_by(email=email).first()
+
+        if user:
+            # Generate 6-digit random verification code
+            otp_code = str(random.randint(100000, 999999))
+            
+            # Save OTP and user state to session
+            session['reset_user_id'] = user.id
+            session['reset_email'] = user.email
+            session['reset_otp'] = otp_code
+
+            # Console Fallback Print
+            print("\n" + "="*50)
+            print(f" VERIFICATION CODE FOR {user.email}: {otp_code}")
+            print("="*50 + "\n")
+
+            # Send Email via SMTP
+            try:
+                msg = Message(
+                    subject="BizTrack Password Reset Code",
+                    sender=('BizTrack', 'oladipojoshua24@gmail.com'),  # Sender explicitly required by Gmail
+                    recipients=[user.email]
+                )
+                msg.body = f"Hello,\n\nYour verification code to reset your password on BizTrack is: {otp_code}\n\nIf you did not request this, please ignore this email."
+                
+                mail.send(msg)
+                print(">>> Email successfully sent via Gmail SMTP! <<<")
+                
+            except Exception as e:
+                # Log detailed error details to console
+                print(f"\n[SMTP ERROR] Failed to dispatch mail: {e}\n")
+                return render_template('forgot_password.html', error=f"Failed to send email. Check app password/console error: {e}")
+
+            return redirect(url_for('verify_code'))
+        else:
+            return render_template('forgot_password.html', error="No account found with that email address.")
+
+    return render_template('forgot_password.html')
+
+# STEP 2: Verify OTP Code
+@app.route('/verify-code', methods=['GET', 'POST'])
+def verify_code():
+    if 'reset_user_id' not in session or 'reset_otp' not in session:
+        return redirect(url_for('forgot_password'))
+
+    if request.method == 'POST':
+        # Handles both 'otp_code' and 'code' HTML input names
+        user_code = (request.form.get('otp_code') or request.form.get('code') or '').strip()
+
+        if user_code == session.get('reset_otp'):
+            session['otp_verified'] = True
+            return redirect(url_for('reset_password'))
+        else:
+            return render_template('verify_code.html', email=session.get('reset_email'), error="Invalid verification code. Please check your console/inbox and try again.")
+
+    return render_template('verify_code.html', email=session.get('reset_email'))
+
+# STEP 3: Set New Password
+@app.route('/reset-password', methods=['GET', 'POST'])
+def reset_password():
+    if not session.get('otp_verified') or 'reset_user_id' not in session:
+        return redirect(url_for('forgot_password'))
+
+    user = User.query.get(session.get('reset_user_id'))
     
-    product.cost_price = float(data['cost_price'])
-    product.selling_price = float(data['selling_price'])
-    
-    db.session.commit()
-    return jsonify({'message': 'Product prices updated successfully', 'product': product.to_dict()})
+    if request.method == 'POST':
+        new_password = request.form.get('password', '').strip()
+        confirm_password = request.form.get('confirm_password', '').strip()
 
-# --- Sales API ---
+        if new_password != confirm_password:
+            return render_template('reset_password.html', email=user.email, error="Passwords do not match.")
 
-@app.route('/api/sales', methods=['GET'])
-def get_sales():
-    sales = Sale.query.order_by(Sale.created_at.desc()).all()
-    return jsonify([s.to_dict() for s in sales])
+        user.password_hash = generate_password_hash(new_password)
+        db.session.commit()
 
-@app.route('/api/sales', methods=['POST'])
-def record_sales():
-    items = request.get_json()  # List of items sold: [{product_id, quantity}, ...]
-    recorded_sales = []
+        # Clear reset session tokens
+        session.pop('reset_user_id', None)
+        session.pop('reset_email', None)
+        session.pop('reset_otp', None)
+        session.pop('otp_verified', None)
 
-    for item in items:
-        product = Product.query.get(item['product_id'])
-        if product and product.stock_qty >= item['quantity']:
-            qty = item['quantity']
-            total = product.selling_price * qty
-            profit = (product.selling_price - product.cost_price) * qty
+        return render_template('login.html', success="Password reset successfully! Please log in with your new password.")
 
-            # Deduct stock and increment sales count
-            product.stock_qty -= qty
-            product.sales_count += qty
+    return render_template('reset_password.html', email=user.email)
 
-            # Record transaction
-            sale = Sale(
-                product_id=product.id,
-                product_name=product.name,
-                quantity=qty,
-                selling_price=product.selling_price,
-                cost_price=product.cost_price,
-                total_amount=total,
-                profit=profit
-            )
-            db.session.add(sale)
-            recorded_sales.append(sale)
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
 
-    db.session.commit()
-    return jsonify({'message': f'Recorded {len(recorded_sales)} sales successfully'})
+@app.route('/admin')
+@admin_required
+def admin_panel():
+    users = User.query.all()
+    return render_template('admin.html', users=users)
 
-# --- Expenses API ---
+@app.route('/admin/delete-user/<int:user_id>', methods=['POST'])
+@admin_required
+def delete_user(user_id):
+    user = User.query.get_or_404(user_id)
+    if not user.is_admin:
+        db.session.delete(user)
+        db.session.commit()
+    return redirect(url_for('admin_panel'))
 
-@app.route('/api/expenses', methods=['GET'])
-def get_expenses():
-    expenses = Expense.query.order_by(Expense.created_at.desc()).all()
-    return jsonify([e.to_dict() for e in expenses])
-
-@app.route('/api/expenses', methods=['POST'])
-def add_expense():
-    data = request.get_json()
-    new_exp = Expense(
-        title=data['title'],
-        amount=float(data['amount'])
-    )
-    db.session.add(new_exp)
-    db.session.commit()
-    return jsonify({'message': 'Expense logged successfully', 'expense': new_exp.to_dict()})
-
-# --- Metrics Summary API ---
+# ==========================================
+# REST API ENDPOINTS
+# ==========================================
 
 @app.route('/api/summary', methods=['GET'])
+@login_required
 def get_summary():
-    products = Product.query.all()
-    sales = Sale.query.all()
-    expenses = Expense.query.all()
+    user_id = session['user_id']
+    today = date.today()
 
-    today_str = datetime.utcnow().strftime('%Y-%m-%d')
+    total_sales = db.session.query(db.func.sum(Sale.total_amount)).filter(Sale.user_id == user_id).scalar() or 0.0
+    total_expenses = db.session.query(db.func.sum(Expense.amount)).filter(Expense.user_id == user_id).scalar() or 0.0
 
-    total_sales = sum(s.total_amount for s in sales)
-    total_profit = sum(s.profit for s in sales)
-    total_expenses = sum(e.amount for e in expenses)
+    today_sales_query = db.session.query(
+        db.func.sum(Sale.total_amount),
+        db.func.sum(Sale.profit)
+    ).filter(Sale.user_id == user_id, db.func.date(Sale.created_at) == today).first()
 
-    today_sales = sum(s.total_amount for s in sales if s.created_at.strftime('%Y-%m-%d') == today_str)
-    today_profit = sum(s.profit for s in sales if s.created_at.strftime('%Y-%m-%d') == today_str)
-
-    expected_balance = total_sales - total_expenses
+    today_sales = today_sales_query[0] or 0.0
+    today_profit = today_sales_query[1] or 0.0
 
     return jsonify({
-        'total_sales': total_sales,
-        'total_profit': total_profit,
+        'expected_balance': total_sales - total_expenses,
         'today_sales': today_sales,
         'today_profit': today_profit,
-        'total_expenses': total_expenses,
-        'expected_balance': expected_balance
+        'total_sales': total_sales,
+        'total_expenses': total_expenses
     })
+
+@app.route('/api/products', methods=['GET', 'POST'])
+@login_required
+def handle_products():
+    user_id = session['user_id']
+    
+    if request.method == 'POST':
+        data = request.get_json()
+        new_prod = Product(
+            user_id=user_id,
+            name=data['name'],
+            cost_price=float(data['cost_price']),
+            selling_price=float(data['selling_price']),
+            stock_qty=int(data['stock_qty'])
+        )
+        db.session.add(new_prod)
+        db.session.commit()
+        return jsonify(new_prod.to_dict()), 201
+
+    products = Product.query.filter_by(user_id=user_id).all()
+    return jsonify([p.to_dict() for p in products])
+
+@app.route('/api/products/<int:prod_id>/edit', methods=['PUT'])
+@login_required
+def edit_product(prod_id):
+    prod = Product.query.filter_by(id=prod_id, user_id=session['user_id']).first_or_404()
+    data = request.get_json()
+    prod.cost_price = float(data['cost_price'])
+    prod.selling_price = float(data['selling_price'])
+    db.session.commit()
+    return jsonify({'message': 'Product updated'})
+
+@app.route('/api/products/<int:prod_id>/restock', methods=['POST'])
+@login_required
+def restock_product(prod_id):
+    prod = Product.query.filter_by(id=prod_id, user_id=session['user_id']).first_or_404()
+    data = request.get_json()
+    prod.stock_qty += int(data['added_qty'])
+    db.session.commit()
+    return jsonify({'message': 'Stock updated'})
+
+@app.route('/api/products/<int:prod_id>', methods=['DELETE'])
+@login_required
+def delete_product(prod_id):
+    prod = Product.query.filter_by(id=prod_id, user_id=session['user_id']).first_or_404()
+    db.session.delete(prod)
+    db.session.commit()
+    return jsonify({'message': 'Product deleted'})
+
+@app.route('/api/sales', methods=['GET', 'POST'])
+@login_required
+def handle_sales():
+    user_id = session['user_id']
+    
+    if request.method == 'POST':
+        items = request.get_json()
+        for item in items:
+            prod = Product.query.filter_by(id=item['product_id'], user_id=user_id).first()
+            if prod and prod.stock_qty >= item['quantity']:
+                qty = item['quantity']
+                total_amt = prod.selling_price * qty
+                profit = (prod.selling_price - prod.cost_price) * qty
+                
+                prod.stock_qty -= qty
+                prod.sales_count += qty
+
+                new_sale = Sale(
+                    user_id=user_id,
+                    product_id=prod.id,
+                    product_name=prod.name,
+                    quantity=qty,
+                    unit_price=prod.selling_price,
+                    cost_price=prod.cost_price,
+                    total_amount=total_amt,
+                    profit=profit
+                )
+                db.session.add(new_sale)
+
+        db.session.commit()
+        return jsonify({'message': 'Sales recorded'}), 201
+
+    sales = Sale.query.filter_by(user_id=user_id).order_by(Sale.created_at.desc()).all()
+    return jsonify([s.to_dict() for s in sales])
+
+@app.route('/api/expenses', methods=['GET', 'POST'])
+@login_required
+def handle_expenses():
+    user_id = session['user_id']
+    
+    if request.method == 'POST':
+        data = request.get_json()
+        new_exp = Expense(
+            user_id=user_id,
+            title=data['title'],
+            amount=float(data['amount'])
+        )
+        db.session.add(new_exp)
+        db.session.commit()
+        return jsonify(new_exp.to_dict()), 201
+
+    expenses = Expense.query.filter_by(user_id=user_id).order_by(Expense.created_at.desc()).all()
+    return jsonify([e.to_dict() for e in expenses])
+
+@app.route('/api/daily-summary', methods=['GET'])
+@login_required
+def get_daily_summary():
+    user_id = session['user_id']
+    
+    sales_by_day = db.session.query(
+        db.func.date(Sale.created_at).label('day'),
+        db.func.sum(Sale.total_amount).label('sales'),
+        db.func.sum(Sale.profit).label('profit')
+    ).filter(Sale.user_id == user_id).group_by('day').all()
+
+    exp_by_day = dict(db.session.query(
+        db.func.date(Expense.created_at).label('day'),
+        db.func.sum(Expense.amount).label('expenses')
+    ).filter(Expense.user_id == user_id).group_by('day').all())
+
+    summary_dict = {}
+    for row in sales_by_day:
+        d = str(row.day)
+        summary_dict[d] = {
+            'date': d,
+            'sales': row.sales or 0.0,
+            'profit': row.profit or 0.0,
+            'expenses': 0.0
+        }
+
+    for day_str, exp_sum in exp_by_day.items():
+        d = str(day_str)
+        if d not in summary_dict:
+            summary_dict[d] = {'date': d, 'sales': 0.0, 'profit': 0.0, 'expenses': exp_sum or 0.0}
+        else:
+            summary_dict[d]['expenses'] = exp_sum or 0.0
+
+    result = []
+    for d, val in sorted(summary_dict.items(), reverse=True):
+        val['net_cash'] = val['profit'] - val['expenses']
+        result.append(val)
+
+    return jsonify(result)
 
 @app.route('/api/reset', methods=['POST'])
 def reset_system():
@@ -267,5 +496,32 @@ def reset_system():
     db.session.commit()
     return jsonify({'message': 'System reset completed successfully'})
 
+# ==========================================
+# DB INITIALIZATION & APP LAUNCH
+# ==========================================
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    with app.app_context():
+        db.create_all()
+        
+        # Admin seeding with target email
+        admin_email = 'joshola7073@gmail.com'
+        admin_user = User.query.filter(db.func.lower(User.email) == admin_email.lower()).first()
+        
+        if not admin_user:
+            try:
+                default_admin = User(
+                    business_name="BizTrack Admin Console",
+                    username="joshua",
+                    email=admin_email,
+                    password_hash=generate_password_hash("admin123"),
+                    is_admin=True
+                )
+                db.session.add(default_admin)
+                db.session.commit()
+                print(f"--> Seeded default admin user: '{admin_email}'")
+            except Exception as e:
+                db.session.rollback()
+                print(f"--> Admin user already exists or failed to seed: {e}")
+
+    app.run(debug=True, port=5000)

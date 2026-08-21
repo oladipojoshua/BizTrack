@@ -1,32 +1,56 @@
 document.addEventListener('DOMContentLoaded', () => {
-    loadSummary();
-    loadProducts();
-    loadSalesHistory();
-    loadExpenses();
+    // Initial data load
+    loadAllData();
 
     // Event Listeners
-    document.getElementById('refreshBtn').addEventListener('click', () => {
-        loadSummary();
-        loadProducts();
-        loadSalesHistory();
-        loadExpenses();
-    });
-
-    document.getElementById('addProductForm').addEventListener('submit', handleAddProduct);
-    document.getElementById('restockForm').addEventListener('submit', handleRestock);
-    document.getElementById('expenseForm').addEventListener('submit', handleAddExpense);
-    document.getElementById('submitChecklistBtn').addEventListener('click', handleSubmitChecklist);
+    document.getElementById('refreshBtn')?.addEventListener('click', loadAllData);
+    document.getElementById('addProductForm')?.addEventListener('submit', handleAddProduct);
+    document.getElementById('restockForm')?.addEventListener('submit', handleRestock);
+    document.getElementById('expenseForm')?.addEventListener('submit', handleAddExpense);
+    document.getElementById('editProductForm')?.addEventListener('submit', handleEditProduct);
+    document.getElementById('submitChecklistBtn')?.addEventListener('click', handleSubmitChecklist);
 });
+
+// Centralized Data Refresh
+async function loadAllData() {
+    await Promise.all([
+        loadSummary(),
+        loadProducts(),
+        loadSalesHistory(),
+        loadExpenses(),
+        loadDailySummary()
+    ]);
+}
 
 // Format Currency
 function formatNaira(amount) {
-    return '₦' + Number(amount).toLocaleString('en-NG', { minimumFractionDigits: 0 });
+    return '₦' + Number(amount || 0).toLocaleString('en-NG', { minimumFractionDigits: 0 });
 }
 
-// Fetch Metrics Summary
+// Helper to handle API responses safely
+async function safeFetch(url, options = {}) {
+    // Ensures requests always hit the active Flask server port
+    const baseUrl = window.location.origin.includes('5000') 
+        ? '' 
+        : 'http://127.0.0.1:5000';
+    
+    try {
+        const res = await fetch(baseUrl + url, options);
+        if (!res.ok) {
+            console.error(`API Error (${res.status}): ${url}`);
+            return null;
+        }
+        return await res.json();
+    } catch (err) {
+        console.error(`Fetch exception for ${url}:`, err);
+        return null;
+    }
+}
+
+// 1. Fetch Metrics Summary
 async function loadSummary() {
-    const res = await fetch('/api/summary');
-    const data = await res.json();
+    const data = await safeFetch('/api/summary');
+    if (!data) return;
 
     document.getElementById('cardAccountBalance').innerText = formatNaira(data.expected_balance);
     document.getElementById('cardTodaySales').innerText = formatNaira(data.today_sales);
@@ -35,47 +59,55 @@ async function loadSummary() {
     document.getElementById('cardExpenses').innerText = formatNaira(data.total_expenses);
 }
 
-// Fetch Products (Inventory & Daily Checklist)
+// 2. Fetch Products (Inventory & Daily Checklist)
 async function loadProducts() {
-    const res = await fetch('/api/products');
-    const products = await res.json();
+    const products = await safeFetch('/api/products');
+    if (!products) return;
 
     // Render Inventory Table
-const invBody = document.getElementById('inventoryTableBody');
-invBody.innerHTML = products.map(p => `
-    <tr>
-        <td class="fw-bold">${p.name}</td>
-        <td>${formatNaira(p.cost_price)}</td>
-        <td>${formatNaira(p.selling_price)}</td>
-        <td>${p.sales_count}</td>
-        <td><span class="badge ${p.stock_qty < 5 ? 'bg-danger' : 'bg-success'}">${p.stock_qty}</span></td>
-        <td>
-            <div class="d-flex gap-1">
-                <button class="btn btn-sm btn-outline-primary py-0 px-2" onclick="openRestockModal(${p.id}, '${p.name}')">+ Stock</button>
-                <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="deleteProduct(${p.id}, '${p.name}')"><i class="bi bi-trash"></i></button>
-            </div>
-        </td>
-    </tr>
-`).join('');
+    const invBody = document.getElementById('inventoryTableBody');
+    if (invBody) {
+        invBody.innerHTML = products.map(p => {
+            const safeName = p.name.replace(/'/g, "\\'");
+            return `
+                <tr>
+                    <td class="fw-bold">${p.name}</td>
+                    <td>${formatNaira(p.cost_price)}</td>
+                    <td>${formatNaira(p.selling_price)}</td>
+                    <td>${p.sales_count}</td>
+                    <td><span class="badge ${p.stock_qty < 5 ? 'bg-danger' : 'bg-success'}">${p.stock_qty}</span></td>
+                    <td>
+                        <div class="d-flex gap-1">
+                            <button class="btn btn-sm btn-outline-warning py-0 px-2" onclick="openEditModal(${p.id}, '${safeName}', ${p.cost_price}, ${p.selling_price})"><i class="bi bi-pencil"></i></button>
+                            <button class="btn btn-sm btn-outline-primary py-0 px-2" onclick="openRestockModal(${p.id}, '${safeName}')">+ Stock</button>
+                            <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="deleteProduct(${p.id}, '${safeName}')"><i class="bi bi-trash"></i></button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
 
     // Render Daily Sales Checklist
     const checkBody = document.getElementById('checklistTableBody');
-    checkBody.innerHTML = products.map(p => `
-        <tr>
-            <td class="text-center">
-                <input type="checkbox" class="form-check-input checklist-check" data-id="${p.id}" ${p.stock_qty === 0 ? 'disabled' : ''}>
-            </td>
-            <td class="fw-semibold">${p.name}</td>
-            <td>${formatNaira(p.selling_price)}</td>
-            <td><span class="badge bg-secondary">${p.stock_qty} left</span></td>
-            <td>
-                <input type="number" class="form-control form-control-sm checklist-qty" data-id="${p.id}" value="1" min="1" max="${p.stock_qty}" ${p.stock_qty === 0 ? 'disabled' : ''}>
-            </td>
-        </tr>
-    `).join('');
+    if (checkBody) {
+        checkBody.innerHTML = products.map(p => `
+            <tr>
+                <td class="text-center">
+                    <input type="checkbox" class="form-check-input checklist-check" data-id="${p.id}" ${p.stock_qty === 0 ? 'disabled' : ''}>
+                </td>
+                <td class="fw-semibold">${p.name}</td>
+                <td>${formatNaira(p.selling_price)}</td>
+                <td><span class="badge bg-secondary">${p.stock_qty} left</span></td>
+                <td>
+                    <input type="number" class="form-control form-control-sm checklist-qty" data-id="${p.id}" value="1" min="1" max="${p.stock_qty}" ${p.stock_qty === 0 ? 'disabled' : ''}>
+                </td>
+            </tr>
+        `).join('');
+    }
 }
 
-// Add Product
+// 3. Add Product
 async function handleAddProduct(e) {
     e.preventDefault();
     const payload = {
@@ -85,18 +117,55 @@ async function handleAddProduct(e) {
         stock_qty: document.getElementById('prodStock').value
     };
 
-    await fetch('/api/products', {
+    const res = await safeFetch('/api/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
     });
 
-    bootstrap.Modal.getInstance(document.getElementById('addProductModal')).hide();
-    document.getElementById('addProductForm').reset();
-    loadProducts();
+    if (res) {
+        const modalEl = document.getElementById('addProductModal');
+        const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+        modal.hide();
+        document.getElementById('addProductForm').reset();
+        await loadAllData();
+    } else {
+        alert('Failed to add product. Please check your backend terminal.');
+    }
 }
 
-// Restock
+// 4. Edit Product
+function openEditModal(id, name, cost, price) {
+    document.getElementById('editProductId').value = id;
+    document.getElementById('editProductName').innerText = name;
+    document.getElementById('editCostPrice').value = cost;
+    document.getElementById('editSellingPrice').value = price;
+    new bootstrap.Modal(document.getElementById('editProductModal')).show();
+}
+
+async function handleEditProduct(e) {
+    e.preventDefault();
+    const id = document.getElementById('editProductId').value;
+    const payload = {
+        cost_price: document.getElementById('editCostPrice').value,
+        selling_price: document.getElementById('editSellingPrice').value
+    };
+
+    const res = await safeFetch(`/api/products/${id}/edit`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+
+    if (res) {
+        const modalEl = document.getElementById('editProductModal');
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) modal.hide();
+        await loadProducts();
+    }
+}
+
+// 5. Restock Product
 function openRestockModal(id, name) {
     document.getElementById('restockProductId').value = id;
     document.getElementById('restockProductName').innerText = name;
@@ -108,29 +177,29 @@ async function handleRestock(e) {
     const id = document.getElementById('restockProductId').value;
     const added_qty = document.getElementById('restockQty').value;
 
-    await fetch(`/api/products/${id}/restock`, {
+    const res = await safeFetch(`/api/products/${id}/restock`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ added_qty })
     });
 
-    bootstrap.Modal.getInstance(document.getElementById('restockModal')).hide();
-    loadProducts();
-}
-
-// Delete Product
-async function deleteProduct(id, name) {
-    if (confirm(`Are you sure you want to delete "${name}" from inventory?`)) {
-        await fetch(`/api/products/${id}`, {
-            method: 'DELETE'
-        });
-        
-        loadSummary();
-        loadProducts();
+    if (res) {
+        const modalEl = document.getElementById('restockModal');
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) modal.hide();
+        await loadProducts();
     }
 }
 
-// Record Sales Checklist
+// 6. Delete Product
+async function deleteProduct(id, name) {
+    if (confirm(`Are you sure you want to delete "${name}" from inventory?`)) {
+        await safeFetch(`/api/products/${id}`, { method: 'DELETE' });
+        await loadAllData();
+    }
+}
+
+// 7. Record Sales Checklist
 async function handleSubmitChecklist() {
     const items = [];
     const checkboxes = document.querySelectorAll('.checklist-check:checked');
@@ -149,48 +218,52 @@ async function handleSubmitChecklist() {
         return;
     }
 
-    await fetch('/api/sales', {
+    const res = await safeFetch('/api/sales', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(items)
     });
 
-    loadSummary();
-    loadProducts();
-    loadSalesHistory();
-    alert('Sales recorded successfully!');
+    if (res) {
+        await loadAllData();
+        alert('Sales recorded successfully!');
+    }
 }
 
-// Sales History
+// 8. Sales History
 async function loadSalesHistory() {
-    const res = await fetch('/api/sales');
-    const sales = await res.json();
+    const sales = await safeFetch('/api/sales');
+    if (!sales) return;
 
     const body = document.getElementById('historyTableBody');
-    body.innerHTML = sales.map(s => `
-        <tr>
-            <td class="text-muted small">${s.created_at}</td>
-            <td class="fw-semibold">${s.product_name}</td>
-            <td>${s.quantity}</td>
-            <td class="text-success fw-bold">${formatNaira(s.total_amount)}</td>
-            <td class="text-primary fw-bold">${formatNaira(s.profit)}</td>
-        </tr>
-    `).join('');
+    if (body) {
+        body.innerHTML = sales.map(s => `
+            <tr>
+                <td class="text-muted small">${s.created_at}</td>
+                <td class="fw-semibold">${s.product_name}</td>
+                <td>${s.quantity}</td>
+                <td class="text-success fw-bold">${formatNaira(s.total_amount)}</td>
+                <td class="text-primary fw-bold">${formatNaira(s.profit)}</td>
+            </tr>
+        `).join('');
+    }
 }
 
-// Expenses
+// 9. Expenses
 async function loadExpenses() {
-    const res = await fetch('/api/expenses');
-    const expenses = await res.json();
+    const expenses = await safeFetch('/api/expenses');
+    if (!expenses) return;
 
     const body = document.getElementById('expenseTableBody');
-    body.innerHTML = expenses.map(e => `
-        <tr>
-            <td class="text-muted small">${e.created_at}</td>
-            <td>${e.title}</td>
-            <td class="text-danger fw-bold">${formatNaira(e.amount)}</td>
-        </tr>
-    `).join('');
+    if (body) {
+        body.innerHTML = expenses.map(e => `
+            <tr>
+                <td class="text-muted small">${e.created_at}</td>
+                <td>${e.title}</td>
+                <td class="text-danger fw-bold">${formatNaira(e.amount)}</td>
+            </tr>
+        `).join('');
+    }
 }
 
 async function handleAddExpense(e) {
@@ -200,76 +273,41 @@ async function handleAddExpense(e) {
         amount: document.getElementById('expAmount').value
     };
 
-    await fetch('/api/expenses', {
+    const res = await safeFetch('/api/expenses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
     });
 
-    bootstrap.Modal.getInstance(document.getElementById('addExpenseModal')).hide();
-    document.getElementById('expenseForm').reset();
-    loadSummary();
-    loadExpenses();
+    if (res) {
+        const modalEl = document.getElementById('addExpenseModal');
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) modal.hide();
+        document.getElementById('expenseForm').reset();
+        await loadAllData();
+    }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    // ... Existing load calls ...
-    loadDailySummary();
-
-    // Add edit form submit listener
-    document.getElementById('editProductForm').addEventListener('submit', handleEditProduct);
-});
-
-// 1. EDIT PRODUCT LOGIC
-function openEditModal(id, name, cost, price) {
-    document.getElementById('editProductId').value = id;
-    document.getElementById('editProductName').innerText = name;
-    document.getElementById('editCostPrice').value = cost;
-    document.getElementById('editSellingPrice').value = price;
-    new bootstrap.Modal(document.getElementById('editProductModal')).show();
-}
-
-async function handleEditProduct(e) {
-    e.preventDefault();
-    const id = document.getElementById('editProductId').value;
-    const payload = {
-        cost_price: document.getElementById('editCostPrice').value,
-        selling_price: document.getElementById('editSellingPrice').value
-    };
-
-    await fetch(`/api/products/${id}/edit`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    });
-
-    bootstrap.Modal.getInstance(document.getElementById('editProductModal')).hide();
-    loadProducts();
-}
-
-// Update inventory table rendering to include Edit button:
-// Inside loadProducts():
-// <button class="btn btn-sm btn-outline-warning py-0 px-2" onclick="openEditModal(${p.id}, '${p.name}', ${p.cost_price}, ${p.selling_price})"><i class="bi bi-pencil"></i></button>
-
-// 2. DAILY SUMMARY FETCH & RENDER
+// 10. Daily Summary
 async function loadDailySummary() {
-    const res = await fetch('/api/daily-summary');
-    const data = await res.json();
+    const data = await safeFetch('/api/daily-summary');
+    if (!data) return;
 
     const body = document.getElementById('dailySummaryTableBody');
-    if (!body) return;
-
-    body.innerHTML = data.map(d => `
-        <tr>
-            <td class="fw-bold">${d.date}</td>
-            <td class="text-success">${formatNaira(d.sales)}</td>
-            <td class="text-primary fw-bold">${formatNaira(d.profit)}</td>
-            <td class="text-danger">${formatNaira(d.expenses)}</td>
-            <td class="fw-bold ${d.net_cash >= 0 ? 'text-dark' : 'text-danger'}">${formatNaira(d.net_cash)}</td>
-        </tr>
-    `).join('');
+    if (body) {
+        body.innerHTML = data.map(d => `
+            <tr>
+                <td class="fw-bold">${d.date}</td>
+                <td class="text-success">${formatNaira(d.sales)}</td>
+                <td class="text-primary fw-bold">${formatNaira(d.profit)}</td>
+                <td class="text-danger">${formatNaira(d.expenses)}</td>
+                <td class="fw-bold ${d.net_cash >= 0 ? 'text-dark' : 'text-danger'}">${formatNaira(d.net_cash)}</td>
+            </tr>
+        `).join('');
+    }
 }
 
+// 11. Reset System
 async function executeReset(type) {
     const confirmMessage = type === 'full' 
         ? 'Are you sure you want to perform a FULL RESET? All products, sales history, and expenses will be permanently deleted.' 
@@ -277,22 +315,17 @@ async function executeReset(type) {
 
     if (!confirm(confirmMessage)) return;
 
-    await fetch('/api/reset', {
+    const res = await safeFetch('/api/reset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: type })
     });
 
-    // Close Modal and refresh all UI sections
-    const modalEl = document.getElementById('resetDataModal');
-    const modal = bootstrap.Modal.getInstance(modalEl);
-    if (modal) modal.hide();
-
-    loadSummary();
-    loadProducts();
-    loadSalesHistory();
-    loadExpenses();
-    if (typeof loadDailySummary === 'function') loadDailySummary();
-
-    alert('Reset completed successfully!');
+    if (res) {
+        const modalEl = document.getElementById('resetDataModal');
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) modal.hide();
+        await loadAllData();
+        alert('Reset completed successfully!');
+    }
 }
