@@ -27,17 +27,10 @@ function formatNaira(amount) {
     return '₦' + Number(amount || 0).toLocaleString('en-NG', { minimumFractionDigits: 0 });
 }
 
-// Helper to handle API responses safely
+// Helper to handle API responses safely using relative routes
 async function safeFetch(url, options = {}) {
-
-    fetch('/api/summary');
-    fetch('/api/products');
-    fetch('/api/sales');
-    fetch('/api/expenses');
-    fetch('/api/daily-summary');
-    
     try {
-        const res = await fetch(baseUrl + url, options);
+        const res = await fetch(url, options);
         if (!res.ok) {
             console.error(`API Error (${res.status}): ${url}`);
             return null;
@@ -132,7 +125,7 @@ async function handleAddProduct(e) {
         document.getElementById('addProductForm').reset();
         await loadAllData();
     } else {
-        alert('Failed to add product. Please check your backend terminal.');
+        alert('Failed to add product. Please check your backend logs.');
     }
 }
 
