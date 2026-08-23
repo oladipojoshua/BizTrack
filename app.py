@@ -8,20 +8,31 @@ from flask_mail import Mail, Message
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'super-secret-key-change-this-in-production'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///biztrack.db'
+
+# ==========================================
+# APPLICATION & DATABASE CONFIGURATION
+# ==========================================
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'default-dev-secret-key-change-in-prod')
+
+# Render uses 'DATABASE_URL', falls back to local SQLite if not found
+db_url = os.environ.get('DATABASE_URL', 'sqlite:///biztrack.db')
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # ==========================================
 # EMAIL SMTP CONFIGURATION
 # ==========================================
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 465
-app.config['MAIL_USE_TLS'] = False
-app.config['MAIL_USE_SSL'] = True
-app.config['MAIL_USERNAME'] = 'joshola7073@gmail.com'
-app.config['MAIL_PASSWORD'] = 'vqrv uouf ecny oiui'
-app.config['MAIL_DEFAULT_SENDER'] = ('BizTrack', 'joshola7073@gmail.com')
+app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 465))
+app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'False').lower() in ['true', '1']
+app.config['MAIL_USE_SSL'] = os.environ.get('MAIL_USE_SSL', 'True').lower() in ['true', '1']
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'joshola7073@gmail.com')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', 'vqrv uouf ecny oiui')
+
+sender_email = app.config['MAIL_USERNAME']
+app.config['MAIL_DEFAULT_SENDER'] = ('BizTrack', sender_email)
 
 db = SQLAlchemy(app)
 mail = Mail(app)
@@ -100,7 +111,7 @@ class Expense(db.Model):
         }
 
 # ==========================================
-# CONTEXT PROCESSOR (INJECTS current_user GLOBALLY)
+# CONTEXT PROCESSOR & DECORATORS
 # ==========================================
 
 @app.context_processor
@@ -108,10 +119,6 @@ def inject_user():
     if 'user_id' in session:
         return {'current_user': User.query.get(session['user_id'])}
     return {'current_user': None}
-
-# ==========================================
-# AUTHENTICATION DECORATORS
-# ==========================================
 
 def login_required(f):
     @wraps(f)
@@ -149,7 +156,7 @@ def login():
             session['user_id'] = user.id
             session['email'] = user.email
             session['business_name'] = user.business_name
-            session['username'] = user.username  # <-- Store in session
+            session['username'] = user.username
             session['is_admin'] = user.is_admin
             
             if user.is_admin:
@@ -163,7 +170,7 @@ def login():
 def signup():
     if request.method == 'POST':
         business_name = request.form.get('business_name', '').strip()
-        username = request.form.get('username', '').strip()  # <-- Collect username
+        username = request.form.get('username', '').strip()
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '').strip()
 
@@ -172,11 +179,11 @@ def signup():
 
         hashed_pw = generate_password_hash(password)
         is_first_user = User.query.count() == 0
-        is_admin = is_first_user or (email == 'joshua@biztrack.com' or username.lower() == 'joshua')
+        is_admin = is_first_user or (email == os.environ.get('ADMIN_EMAIL', 'joshola7073@gmail.com').lower() or username.lower() == 'joshua')
 
         new_user = User(
             business_name=business_name,
-            username=username,  # <-- Save to DB
+            username=username,
             email=email,
             password_hash=hashed_pw,
             is_admin=is_admin
@@ -187,14 +194,13 @@ def signup():
         session['user_id'] = new_user.id
         session['email'] = new_user.email
         session['business_name'] = new_user.business_name
-        session['username'] = new_user.username  # <-- Store in session
+        session['username'] = new_user.username
         session['is_admin'] = new_user.is_admin
 
         return redirect(url_for('admin_panel' if is_admin else 'dashboard'))
 
     return render_template('signup.html')
 
-# STEP 1: Request OTP Code
 @app.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
     if request.method == 'POST':
@@ -202,24 +208,20 @@ def forgot_password():
         user = User.query.filter_by(email=email).first()
 
         if user:
-            # Generate 6-digit random verification code
             otp_code = str(random.randint(100000, 999999))
             
-            # Save OTP and user state to session
             session['reset_user_id'] = user.id
             session['reset_email'] = user.email
             session['reset_otp'] = otp_code
 
-            # Console Fallback Print
             print("\n" + "="*50)
             print(f" VERIFICATION CODE FOR {user.email}: {otp_code}")
             print("="*50 + "\n")
 
-            # Send Email via SMTP
             try:
                 msg = Message(
                     subject="BizTrack Password Reset Code",
-                    sender=('BizTrack', 'oladipojoshua24@gmail.com'),  # Sender explicitly required by Gmail
+                    sender=('BizTrack', app.config['MAIL_USERNAME']),
                     recipients=[user.email]
                 )
                 msg.body = f"Hello,\n\nYour verification code to reset your password on BizTrack is: {otp_code}\n\nIf you did not request this, please ignore this email."
@@ -228,9 +230,8 @@ def forgot_password():
                 print(">>> Email successfully sent via Gmail SMTP! <<<")
                 
             except Exception as e:
-                # Log detailed error details to console
                 print(f"\n[SMTP ERROR] Failed to dispatch mail: {e}\n")
-                return render_template('forgot_password.html', error=f"Failed to send email. Check app password/console error: {e}")
+                return render_template('forgot_password.html', error=f"Failed to send email. Check console error: {e}")
 
             return redirect(url_for('verify_code'))
         else:
@@ -238,25 +239,22 @@ def forgot_password():
 
     return render_template('forgot_password.html')
 
-# STEP 2: Verify OTP Code
 @app.route('/verify-code', methods=['GET', 'POST'])
 def verify_code():
     if 'reset_user_id' not in session or 'reset_otp' not in session:
         return redirect(url_for('forgot_password'))
 
     if request.method == 'POST':
-        # Handles both 'otp_code' and 'code' HTML input names
         user_code = (request.form.get('otp_code') or request.form.get('code') or '').strip()
 
         if user_code == session.get('reset_otp'):
             session['otp_verified'] = True
             return redirect(url_for('reset_password'))
         else:
-            return render_template('verify_code.html', email=session.get('reset_email'), error="Invalid verification code. Please check your console/inbox and try again.")
+            return render_template('verify_code.html', email=session.get('reset_email'), error="Invalid verification code. Please check your inbox and try again.")
 
     return render_template('verify_code.html', email=session.get('reset_email'))
 
-# STEP 3: Set New Password
 @app.route('/reset-password', methods=['GET', 'POST'])
 def reset_password():
     if not session.get('otp_verified') or 'reset_user_id' not in session:
@@ -274,7 +272,6 @@ def reset_password():
         user.password_hash = generate_password_hash(new_password)
         db.session.commit()
 
-        # Clear reset session tokens
         session.pop('reset_user_id', None)
         session.pop('reset_email', None)
         session.pop('reset_otp', None)
@@ -476,19 +473,18 @@ def get_daily_summary():
     return jsonify(result)
 
 @app.route('/api/reset', methods=['POST'])
+@login_required
+@admin_required
 def reset_system():
     data = request.get_json() or {}
-    reset_type = data.get('type', 'transactions')  # 'transactions' or 'full'
+    reset_type = data.get('type', 'transactions')
 
-    # 1. Clear Sales and Expense Records
     Sale.query.delete()
     Expense.query.delete()
 
-    # 2. If Full Reset, clear Products and reset sales counters
     if reset_type == 'full':
         Product.query.delete()
     else:
-        # Reset sales_count on existing products back to 0
         products = Product.query.all()
         for p in products:
             p.sales_count = 0
@@ -497,15 +493,15 @@ def reset_system():
     return jsonify({'message': 'System reset completed successfully'})
 
 # ==========================================
-# DB INITIALIZATION & APP LAUNCH
+# DB INITIALIZATION & SEEDING
 # ==========================================
 
-if __name__ == '__main__':
+def init_db():
     with app.app_context():
         db.create_all()
         
-        # Admin seeding with target email
-        admin_email = 'joshola7073@gmail.com'
+        admin_email = os.environ.get('ADMIN_EMAIL', 'joshola7073@gmail.com')
+        admin_pass = os.environ.get('ADMIN_PASSWORD', 'admin123')
         admin_user = User.query.filter(db.func.lower(User.email) == admin_email.lower()).first()
         
         if not admin_user:
@@ -514,7 +510,7 @@ if __name__ == '__main__':
                     business_name="BizTrack Admin Console",
                     username="joshua",
                     email=admin_email,
-                    password_hash=generate_password_hash("admin123"),
+                    password_hash=generate_password_hash(admin_pass),
                     is_admin=True
                 )
                 db.session.add(default_admin)
@@ -522,6 +518,9 @@ if __name__ == '__main__':
                 print(f"--> Seeded default admin user: '{admin_email}'")
             except Exception as e:
                 db.session.rollback()
-                print(f"--> Admin user already exists or failed to seed: {e}")
+                print(f"--> Admin user failed to seed: {e}")
 
+init_db()
+
+if __name__ == '__main__':
     app.run(debug=True, port=5000)
