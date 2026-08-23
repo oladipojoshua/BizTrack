@@ -29,10 +29,12 @@ function formatNaira(amount) {
 
 // Helper to handle API responses safely
 async function safeFetch(url, options = {}) {
-    // Ensures requests always hit the active Flask server port
-    const baseUrl = window.location.origin.includes('5000') 
-        ? '' 
-        : 'http://127.0.0.1:5000';
+
+    fetch('/api/summary');
+    fetch('/api/products');
+    fetch('/api/sales');
+    fetch('/api/expenses');
+    fetch('/api/daily-summary');
     
     try {
         const res = await fetch(baseUrl + url, options);
