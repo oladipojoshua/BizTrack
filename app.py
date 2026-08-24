@@ -203,33 +203,42 @@ def signup():
 
 @app.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
-        print(">>> FORGOT PASSWORD ROUTE HIT <<<")
-        print(">>> METHOD:", request.method)
+    print(">>> FORGOT PASSWORD ROUTE HIT <<<")
+    print(">>> METHOD:", request.method)
 
-        if request.method == 'POST':
-            email = request.form.get('email', '').strip().lower()
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
         user = User.query.filter_by(email=email).first()
 
         if user:
             otp_code = str(random.randint(100000, 999999))
-            
+
             session['reset_user_id'] = user.id
             session['reset_email'] = user.email
             session['reset_otp'] = otp_code
 
-            print("\n" + "="*50)
+            print("\n" + "=" * 50)
             print(f" VERIFICATION CODE FOR {user.email}: {otp_code}")
-            print("="*50 + "\n")
+            print("=" * 50 + "\n")
 
             msg = Message(
                 subject="BizTrack Password Reset Code",
                 sender=('BizTrack', app.config.get('MAIL_USERNAME')),
                 recipients=[user.email]
             )
-            msg.body = f"Hello,\n\nYour verification code to reset your password on BizTrack is: {otp_code}\n\nIf you did not request this, please ignore this email."
 
-            # Send the password reset email directly so SMTP errors are visible
-            # and the user only proceeds after the email has been dispatched.
+            msg.body = f"""Hello,
+
+Your verification code to reset your password on BizTrack is:
+
+{otp_code}
+
+If you did not request this, please ignore this email.
+
+Regards,
+BizTrack Team
+"""
+
             try:
                 mail.send(msg)
                 print(">>> Password reset email sent successfully! <<<")
@@ -241,8 +250,12 @@ def forgot_password():
                 )
 
             return redirect(url_for('verify_code'))
+
         else:
-            return render_template('forgot_password.html', error="No account found with that email address.")
+            return render_template(
+                'forgot_password.html',
+                error="No account found with that email address."
+            )
 
     return render_template('forgot_password.html')
 
