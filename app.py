@@ -1,6 +1,5 @@
 import os
 import random
-import threading
 from datetime import datetime, date
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, current_app, flash
@@ -30,7 +29,7 @@ app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 465))
 app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'False').lower() in ['true', '1']
 app.config['MAIL_USE_SSL'] = os.environ.get('MAIL_USE_SSL', 'True').lower() in ['true', '1']
 app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'joshola7073@gmail.com')
-app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', 'vqrv uouf ecny oiui')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
 
 sender_email = app.config['MAIL_USERNAME']
 app.config['MAIL_DEFAULT_SENDER'] = ('BizTrack', sender_email)
@@ -129,15 +128,6 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-def send_async_email(app, msg):
-    """Executes mail delivery in a background thread with application context."""
-    with app.app_context():
-        try:
-            mail.send(msg)
-            print(">>> Email successfully sent via Gmail SMTP! <<<")
-        except Exception as e:
-            print(f"\n[SMTP ERROR] Failed to dispatch mail in background: {e}\n")
-
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -235,9 +225,17 @@ def forgot_password():
             )
             msg.body = f"Hello,\n\nYour verification code to reset your password on BizTrack is: {otp_code}\n\nIf you did not request this, please ignore this email."
 
-            # Offload mail.send to background thread so request finishes immediately
-            app_obj = current_app._get_current_object()
-            threading.Thread(target=send_async_email, args=(app_obj, msg)).start()
+            # Send the password reset email directly so SMTP errors are visible
+            # and the user only proceeds after the email has been dispatched.
+            try:
+                mail.send(msg)
+                print(">>> Password reset email sent successfully! <<<")
+            except Exception as e:
+                print(f"[SMTP ERROR] Failed to send password reset email: {e}")
+                return render_template(
+                    'forgot_password.html',
+                    error="Unable to send verification email. Please try again later."
+                )
 
             return redirect(url_for('verify_code'))
         else:
