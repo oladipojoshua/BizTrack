@@ -46,6 +46,18 @@
             cursor: pointer;
         }
         button:hover { background-color: #0056b3; }
+        
+        /* Spam warning box styles */
+        .spam-notice {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+            padding: 10px 12px;
+            border-radius: 4px;
+            font-size: 13px;
+            margin-top: 15px;
+            line-height: 1.4;
+        }
     </style>
 </head>
 <body>
@@ -60,6 +72,10 @@
             </div>
             <button type="submit">Verify Code</button>
         </form>
+
+        <div class="spam-notice">
+            💡 <strong>Can't find the email?</strong> Please check your <strong>Spam or Junk</strong> folder if it doesn't appear in your main inbox shortly.
+        </div>
     </div>
 </body>
 </html>

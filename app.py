@@ -1,11 +1,14 @@
 import os
+from dotenv import load_dotenv
+load_dotenv()
 import random
 from datetime import datetime, date
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, current_app, flash
 from flask_sqlalchemy import SQLAlchemy
-from flask_mail import Mail, Message
 from werkzeug.security import generate_password_hash, check_password_hash
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 
 app = Flask(__name__)
 
@@ -22,20 +25,12 @@ app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # ==========================================
-# EMAIL SMTP CONFIGURATION
+# SENDGRID & SENDER CONFIGURATION
 # ==========================================
-app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
-app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 465))
-app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'False').lower() in ['true', '1']
-app.config['MAIL_USE_SSL'] = os.environ.get('MAIL_USE_SSL', 'True').lower() in ['true', '1']
-app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'joshola7073@gmail.com')
-app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
-
-sender_email = app.config['MAIL_USERNAME']
-app.config['MAIL_DEFAULT_SENDER'] = ('BizTrack', sender_email)
+SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY')
+SENDER_EMAIL = os.environ.get('MAIL_USERNAME', 'joshola7073@gmail.com')
 
 db = SQLAlchemy(app)
-mail = Mail(app)
 
 # ==========================================
 # DATABASE MODELS
@@ -221,13 +216,11 @@ def forgot_password():
             print(f" VERIFICATION CODE FOR {user.email}: {otp_code}")
             print("=" * 50 + "\n")
 
-            msg = Message(
+            message = Mail(
+                from_email=(SENDER_EMAIL, 'BizTrack'),
+                to_emails=user.email,
                 subject="BizTrack Password Reset Code",
-                sender=('BizTrack', app.config.get('MAIL_USERNAME')),
-                recipients=[user.email]
-            )
-
-            msg.body = f"""Hello,
+                plain_text_content=f"""Hello,
 
 Your verification code to reset your password on BizTrack is:
 
@@ -238,12 +231,14 @@ If you did not request this, please ignore this email.
 Regards,
 BizTrack Team
 """
+            )
 
             try:
-                mail.send(msg)
-                print(">>> Password reset email sent successfully! <<<")
+                sg = SendGridAPIClient(SENDGRID_API_KEY)
+                response = sg.send(message)
+                print(f">>> SendGrid status code: {response.status_code} <<<")
             except Exception as e:
-                print(f"[SMTP ERROR] Failed to send password reset email: {e}")
+                print(f"[SENDGRID ERROR] Failed to send password reset email: {e}")
                 return render_template(
                     'forgot_password.html',
                     error="Unable to send verification email. Please try again later."
