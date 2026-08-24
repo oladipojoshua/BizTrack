@@ -203,8 +203,11 @@ def signup():
 
 @app.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
-    if request.method == 'POST':
-        email = request.form.get('email', '').strip().lower()
+        print(">>> FORGOT PASSWORD ROUTE HIT <<<")
+        print(">>> METHOD:", request.method)
+
+        if request.method == 'POST':
+            email = request.form.get('email', '').strip().lower()
         user = User.query.filter_by(email=email).first()
 
         if user:
