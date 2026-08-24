@@ -1,8 +1,9 @@
 import os
 import random
+import threading
 from datetime import datetime, date
 from functools import wraps
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, current_app, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_mail import Mail, Message
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -128,6 +129,15 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+def send_async_email(app, msg):
+    """Executes mail delivery in a background thread with application context."""
+    with app.app_context():
+        try:
+            mail.send(msg)
+            print(">>> Email successfully sent via Gmail SMTP! <<<")
+        except Exception as e:
+            print(f"\n[SMTP ERROR] Failed to dispatch mail in background: {e}\n")
+
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -218,20 +228,16 @@ def forgot_password():
             print(f" VERIFICATION CODE FOR {user.email}: {otp_code}")
             print("="*50 + "\n")
 
-            try:
-                msg = Message(
-                    subject="BizTrack Password Reset Code",
-                    sender=('BizTrack', app.config['MAIL_USERNAME']),
-                    recipients=[user.email]
-                )
-                msg.body = f"Hello,\n\nYour verification code to reset your password on BizTrack is: {otp_code}\n\nIf you did not request this, please ignore this email."
-                
-                mail.send(msg)
-                print(">>> Email successfully sent via Gmail SMTP! <<<")
-                
-            except Exception as e:
-                print(f"\n[SMTP ERROR] Failed to dispatch mail: {e}\n")
-                return render_template('forgot_password.html', error=f"Failed to send email. Check console error: {e}")
+            msg = Message(
+                subject="BizTrack Password Reset Code",
+                sender=('BizTrack', app.config.get('MAIL_USERNAME')),
+                recipients=[user.email]
+            )
+            msg.body = f"Hello,\n\nYour verification code to reset your password on BizTrack is: {otp_code}\n\nIf you did not request this, please ignore this email."
+
+            # Offload mail.send to background thread so request finishes immediately
+            app_obj = current_app._get_current_object()
+            threading.Thread(target=send_async_email, args=(app_obj, msg)).start()
 
             return redirect(url_for('verify_code'))
         else:
