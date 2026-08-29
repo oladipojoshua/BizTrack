@@ -146,7 +146,9 @@ def login():
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '').strip()
 
-        user = User.query.filter_by(email=email).first()
+        # Case-insensitive email query
+        user = User.query.filter(db.func.lower(User.email) == email).first()
+        
         if user and check_password_hash(user.password_hash, password):
             session['user_id'] = user.id
             session['email'] = user.email
@@ -222,16 +224,16 @@ def forgot_password():
                 subject="BizTrack Password Reset Code",
                 plain_text_content=f"""Hello,
 
-Your verification code to reset your password on BizTrack is:
+                    Your verification code to reset your password on BizTrack is:
 
-{otp_code}
+                    {otp_code}
 
-If you did not request this, please ignore this email.
+                    If you did not request this, please ignore this email.
 
-Regards,
-BizTrack Team
-"""
-            )
+                    Regards,
+                    BizTrack Team
+                    """
+                )
 
             try:
                 sg = SendGridAPIClient(SENDGRID_API_KEY)
@@ -512,30 +514,30 @@ def reset_system():
 # ==========================================
 
 def init_db():
-    with app.app_context():
-        db.create_all()
-        
-        admin_email = os.environ.get('ADMIN_EMAIL', 'joshola7073@gmail.com')
-        admin_pass = os.environ.get('ADMIN_PASSWORD', 'admin123')
-        admin_user = User.query.filter(db.func.lower(User.email) == admin_email.lower()).first()
-        
-        if not admin_user:
-            try:
-                default_admin = User(
-                    business_name="BizTrack Admin Console",
-                    username="joshua",
-                    email=admin_email,
-                    password_hash=generate_password_hash(admin_pass),
-                    is_admin=True
-                )
-                db.session.add(default_admin)
-                db.session.commit()
-                print(f"--> Seeded default admin user: '{admin_email}'")
-            except Exception as e:
-                db.session.rollback()
-                print(f"--> Admin user failed to seed: {e}")
+    db.create_all()
+    
+    admin_email = os.environ.get('ADMIN_EMAIL', 'joshola7073@gmail.com').strip().lower()
+    admin_pass = os.environ.get('ADMIN_PASSWORD', 'admin123')
+    admin_user = User.query.filter(db.func.lower(User.email) == admin_email).first()
+    
+    if not admin_user:
+        try:
+            default_admin = User(
+                business_name="BizTrack Admin Console",
+                username="joshua",
+                email=admin_email,
+                password_hash=generate_password_hash(admin_pass),
+                is_admin=True
+            )
+            db.session.add(default_admin)
+            db.session.commit()
+            print(f"--> Seeded default admin user: '{admin_email}'")
+        except Exception as e:
+            db.session.rollback()
+            print(f"--> Admin user failed to seed: {e}")
 
-init_db()
 
 if __name__ == '__main__':
+    with app.app_context():
+        init_db()
     app.run(debug=True, port=5000)
